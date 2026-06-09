@@ -1,22 +1,63 @@
 # RAG AI Chatbot
 
-AI-powered document chatbot using:
+An AI-powered document question-answering chatbot built using:
 
+- OpenAI APIs
 - FastAPI
-- OpenAI
 - LangChain
 - ChromaDB
-- Embeddings
-- PDF ingestion
+- PDF document embeddings
+- Retrieval-Augmented Generation (RAG)
 
-## Features
+This project allows users to:
 
-- Upload PDFs
-- Ask questions from documents
-- Vector similarity search
-- OpenAI LLM responses
+- Upload PDF documents
+- Convert documents into embeddings
+- Store embeddings in a vector database
+- Ask questions from uploaded documents
+- Get AI-generated answers using semantic search
 
-## Run Project
+---
 
-```bash
-uvicorn main:app --reload
+# Features
+
+- PDF upload API
+- Automatic text chunking
+- OpenAI embeddings generation
+- Chroma vector database storage
+- Semantic similarity search
+- AI-generated answers using GPT models
+- FastAPI backend APIs
+- Environment variable support
+- Clean modular structure
+
+---
+
+# Tech Stack
+
+| Technology | Purpose |
+|---|---|
+| Python | Backend language |
+| FastAPI | API framework |
+| OpenAI API | LLM + embeddings |
+| LangChain | RAG pipeline |
+| ChromaDB | Vector database |
+| PyPDF | PDF parsing |
+| Uvicorn | ASGI server |
+
+---
+
+# Project Structure
+
+```text
+rag-ai-chatbot/
+│
+├── main.py                 # FastAPI application
+├── requirements.txt        # Project dependencies
+├── .env                    # Environment variables
+├── .gitignore
+├── README.md
+│
+├── uploads/                # Uploaded PDFs
+│
+└── chroma_db/              # Vector database storage

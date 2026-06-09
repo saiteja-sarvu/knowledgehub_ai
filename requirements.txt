@@ -15,3 +15,5 @@ ollama
 
 pypdf
 tiktoken
+
+jinja2

@@ -52,7 +52,7 @@ This project allows users to:
 ```text
 rag-ai-chatbot/
 │
-├── main.py                 # FastAPI application
+├── app.py                 # FastAPI application
 ├── requirements.txt        # Project dependencies
 ├── .env                    # Environment variables
 ├── .gitignore

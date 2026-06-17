@@ -1,21 +1,89 @@
 
 // ======================================================
+// Elements
+// ======================================================
+
+const fileInput = document.getElementById("pdfFile");
+
+const uploadStatus = document.getElementById("uploadStatus");
+
+const questionInput = document.getElementById("questionInput");
+
+const chatBox = document.getElementById("chatBox");
+
+const askButton = document.getElementById("askButton");
+
+
+// ======================================================
+// Escape HTML (Security)
+// ======================================================
+
+function escapeHTML(text) {
+
+    const div = document.createElement("div");
+
+    div.textContent = text;
+
+    return div.innerHTML;
+}
+
+
+// ======================================================
+// Scroll Chat Bottom
+// ======================================================
+
+function scrollToBottom() {
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+
+// ======================================================
+// Add Chat Message
+// ======================================================
+
+function addMessage(type, content) {
+
+    const div = document.createElement("div");
+
+    div.className = type === "user"
+        ? "user-message"
+        : "bot-message";
+
+    div.innerHTML = escapeHTML(content);
+
+    chatBox.appendChild(div);
+
+    scrollToBottom();
+
+    return div;
+}
+
+
+// ======================================================
 // Upload PDF
 // ======================================================
 
 async function uploadPDF() {
 
-    const fileInput = document.getElementById("pdfFile");
-
-    const statusDiv = document.getElementById("uploadStatus");
-
     const file = fileInput.files[0];
 
     if (!file) {
 
-        statusDiv.innerHTML = `
+        uploadStatus.innerHTML = `
             <div class="alert alert-danger">
                 Please select a PDF file
+            </div>
+        `;
+
+        return;
+    }
+
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+
+        uploadStatus.innerHTML = `
+            <div class="alert alert-danger">
+                Only PDF files are allowed
             </div>
         `;
 
@@ -26,7 +94,7 @@ async function uploadPDF() {
 
     formData.append("file", file);
 
-    statusDiv.innerHTML = `
+    uploadStatus.innerHTML = `
         <div class="alert alert-info">
             Uploading PDF...
         </div>
@@ -40,31 +108,35 @@ async function uploadPDF() {
         });
 
         const data = await response.json();
-console.log(data);
+
         if (data.success) {
 
-            statusDiv.innerHTML = `
+            uploadStatus.innerHTML = `
                 <div class="alert alert-success">
                     PDF uploaded successfully
+                    <br>
+                    Chunks Created: ${data.chunks_created}
                 </div>
             `;
 
         } else {
 
-            statusDiv.innerHTML = `
+            uploadStatus.innerHTML = `
                 <div class="alert alert-danger">
-                    ${data.message}
+                    ${escapeHTML(data.message)}
                 </div>
             `;
         }
 
     } catch (error) {
 
-        statusDiv.innerHTML = `
+        uploadStatus.innerHTML = `
             <div class="alert alert-danger">
                 Upload failed
             </div>
         `;
+
+        console.error(error);
     }
 }
 
@@ -75,35 +147,28 @@ console.log(data);
 
 async function askQuestion() {
 
-    const input = document.getElementById("questionInput");
-
-    const chatBox = document.getElementById("chatBox");
-
-    const question = input.value.trim();
+    const question = questionInput.value.trim();
 
     if (!question) {
         return;
     }
 
+    // Disable Button
+
+    askButton.disabled = true;
+
     // User Message
 
-    chatBox.innerHTML += `
-        <div class="user-message">
-            ${question}
-        </div>
-    `;
+    addMessage("user", question);
 
-    input.value = "";
+    questionInput.value = "";
 
-    // Loading
+    // Loading Message
 
-    chatBox.innerHTML += `
-        <div class="bot-message" id="loadingMessage">
-            AI is thinking...
-        </div>
-    `;
-
-    chatBox.scrollTop = chatBox.scrollHeight;
+    const loadingDiv = addMessage(
+        "bot",
+        "AI is thinking..."
+    );
 
     try {
 
@@ -118,38 +183,74 @@ async function askQuestion() {
             body: JSON.stringify({
                 question: question
             })
-
         });
 
         const data = await response.json();
-console.log(data);
+
         // Remove Loading
 
-        document
-            .getElementById("loadingMessage")
-            .remove();
+        loadingDiv.remove();
 
-        // Bot Response
+        // Error Response
 
-        chatBox.innerHTML += `
-            <div class="bot-message">
-                ${data.answer}
-            </div>
-        `;
+        if (!data.success) {
 
-        chatBox.scrollTop = chatBox.scrollHeight;
+            addMessage(
+                "bot",
+                data.message || "Something went wrong"
+            );
+
+            return;
+        }
+
+        // Bot Message
+
+        addMessage(
+            "bot",
+            data.answer || "No answer generated"
+        );
+
+        // Sources
+
+        if (data.sources?.length) {
+
+            const sourceDiv = document.createElement("div");
+
+            sourceDiv.className = "source-box";
+
+            sourceDiv.innerHTML = `
+                <strong>Sources:</strong>
+                <ul>
+                    ${data.sources.map(source => `
+                        <li>
+                            ${escapeHTML(source.source)}
+                            (Page: ${source.page})
+                        </li>
+                    `).join("")}
+                </ul>
+            `;
+
+            chatBox.appendChild(sourceDiv);
+
+            scrollToBottom();
+        }
 
     } catch (error) {
 
-        document
-            .getElementById("loadingMessage")
-            .remove();
+        loadingDiv.remove();
 
-        chatBox.innerHTML += `
-            <div class="bot-message">
-                Something went wrong
-            </div>
-        `;
+        addMessage(
+            "bot",
+            "Something went wrong"
+        );
+
+        console.error(error);
+
+    } finally {
+
+        askButton.disabled = false;
+
+        questionInput.focus();
     }
 }
 
@@ -158,13 +259,13 @@ console.log(data);
 // Enter Key Support
 // ======================================================
 
-document
-    .getElementById("questionInput")
-    .addEventListener("keypress", function(event) {
+questionInput.addEventListener(
+    "keypress",
+    function(event) {
 
         if (event.key === "Enter") {
 
             askQuestion();
         }
-
-    });
+    }
+);

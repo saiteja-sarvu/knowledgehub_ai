@@ -102,12 +102,14 @@ chat_history = []
 # Request Model
 # =========================================================
 
+
 class ChatRequest(BaseModel):
     question: str
 
 # =========================================================
 # Helper Function
 # =========================================================
+
 
 def get_vectorstore():
 
@@ -119,6 +121,7 @@ def get_vectorstore():
 # =========================================================
 # Home Route
 # =========================================================
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -135,6 +138,7 @@ async def home(request: Request):
 # Upload PDF Route
 # =========================================================
 
+
 @app.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...)
@@ -142,8 +146,8 @@ async def upload_pdf(
 
     try:
 
-        # Validate PDF
-        if not file.filename.endswith(".pdf"):
+        # Validate File
+        if not file.filename.lower().endswith(".pdf"):
 
             return {
                 "success": False,
@@ -168,30 +172,39 @@ async def upload_pdf(
 
         documents = loader.load()
 
-        # Split Text
+        # Empty PDF
+        if not documents:
+
+            return {
+                "success": False,
+                "message": "No readable content found"
+            }
+
+        # Add Metadata
+        processed_docs = []
+
+        for doc in documents:
+
+            page = doc.metadata.get("page", 0)
+
+            doc.metadata.update({
+                "source": file.filename,
+                "page": page + 1
+            })
+
+            processed_docs.append(doc)
+
+        # Split Documents
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200
         )
 
         docs = text_splitter.split_documents(
-            documents
+            processed_docs
         )
 
-        # Empty PDF Check
-        if not docs:
-
-            return {
-                "success": False,
-                "message": "No readable text found in PDF"
-            }
-
-        # Add Metadata
-        for doc in docs:
-
-            doc.metadata["source"] = file.filename
-
-        # Store in ChromaDB
+        # Vector Store
         vectorstore = get_vectorstore()
 
         vectorstore.add_documents(docs)
@@ -214,7 +227,6 @@ async def upload_pdf(
 # =========================================================
 # Ask Question Route
 # =========================================================
-
 @app.post("/ask")
 def ask_question(request: ChatRequest):
 
@@ -222,13 +234,28 @@ def ask_question(request: ChatRequest):
 
         global chat_history
 
-        # Load Vector Database
+        # Validate Question
+        if not request.question.strip():
+
+            return {
+                "success": False,
+                "message": "Question is required"
+            }
+
+        # Vector Store
         vectorstore = get_vectorstore()
 
-        # Similarity Search
-        results = vectorstore.similarity_search(
-            request.question,
-            k=3
+        # Better Retriever
+        retriever = vectorstore.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": 4,
+                "fetch_k": 10
+            }
+        )
+
+        results = retriever.invoke(
+            request.question
         )
 
         # No Results
@@ -240,12 +267,17 @@ def ask_question(request: ChatRequest):
             }
 
         # Build Context
-        context = "\n\n".join(
-            [
-                doc.page_content
-                for doc in results
-            ]
-        )
+        MAX_CONTEXT_LENGTH = 4000
+
+        context = ""
+
+        for doc in results:
+
+            chunk = doc.page_content.strip()
+
+            if len(context) + len(chunk) < MAX_CONTEXT_LENGTH:
+
+                context += chunk + "\n\n"
 
         # Conversation History
         history_text = "\n".join(
@@ -260,47 +292,63 @@ def ask_question(request: ChatRequest):
 
         # Prompt
         prompt = f"""
-                You are a helpful AI assistant.
-                Use the provided context whenever possible.
-                If the answer is not available in the context,
-                you may answer using your general knowledge.
-                ======================
-                Conversation History:
-                {history_text}
-                ======================
-                ======================
-                Context:
-                {context}
-                ======================
-                Question:
-                {request.question}
-                """
+            You are a helpful AI assistant.
+
+            Rules:
+            1. Use the provided context as the primary source.
+            2. If answer exists in context, answer ONLY from context.
+            3. If answer is not found in context,
+            clearly say:
+            "This answer is based on general knowledge."
+            4. Do not hallucinate facts.
+            5. Keep answers concise and accurate.
+
+            ========================
+            Conversation History:
+            {history_text}
+            ========================
+
+            Context:
+            {context}
+
+            ========================
+
+            Question:
+            {request.question}
+            """
 
         # Generate Response
         response = llm.invoke(prompt)
 
         answer = response.content
 
-        # Save Chat History
-        chat_history.append(
-            {
-                "question": request.question,
-                "answer": answer
-            }
-        )
+        # Save History
+        chat_history.append({
+            "question": request.question,
+            "answer": answer
+        })
+
+        # Limit Memory
+        if len(chat_history) > 20:
+
+            chat_history = chat_history[-20:]
 
         # Sources
-        sources = list(
-            set(
-                [
-                    doc.metadata.get(
-                        "source",
-                        "Unknown"
-                    )
-                    for doc in results
-                ]
-            )
-        )
+        sources = []
+
+        for doc in results:
+
+            sources.append({
+                "source": doc.metadata.get(
+                    "source",
+                    "Unknown"
+                ),
+                "page": doc.metadata.get(
+                    "page",
+                    "Unknown"
+                ),
+                "content": doc.page_content[:200]
+            })
 
         return {
             "success": True,
@@ -317,4 +365,3 @@ def ask_question(request: ChatRequest):
             "success": False,
             "message": str(e)
         }
-

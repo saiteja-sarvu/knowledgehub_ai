@@ -115,8 +115,7 @@ rag-ai-chatbot/
 │   ├── style.css
 │   ├── script.js
 │   └── favicon.ico
-│
-└── screenshots/
+
 ```
 
 ---
@@ -276,6 +275,6 @@ Example Response:
 
 ---
 
-## License
+<!-- ## License
 
-This project is open-source and available under the MIT License.
+This project is open-source and available under the MIT License. -->

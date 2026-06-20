@@ -9,6 +9,8 @@ The assistant can:
 - Keep documents, vector collections, and chat history isolated by user.
 - Register, sign in, and sign out using JWT authentication in an HTTP-only cookie.
 
+For a detailed architecture walkthrough, demo script, and interview questions, see the [Interview Presentation Guide](docs/INTERVIEW_GUIDE.md).
+
 ## Technology
 
 - FastAPI and Jinja2

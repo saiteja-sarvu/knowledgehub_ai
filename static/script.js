@@ -13,6 +13,25 @@ const chatBox = document.getElementById("chatBox");
 
 const askButton = document.getElementById("askButton");
 
+const sessionId = getSessionId();
+
+
+function getSessionId() {
+
+    const storageKey = "knowledgehub_session_id";
+
+    let value = localStorage.getItem(storageKey);
+
+    if (!value) {
+
+        value = crypto.randomUUID();
+
+        localStorage.setItem(storageKey, value);
+    }
+
+    return value;
+}
+
 
 // ======================================================
 // Escape HTML (Security)
@@ -109,7 +128,7 @@ async function uploadPDF() {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (response.ok && data.success) {
 
             uploadStatus.innerHTML = `
                 <div class="alert alert-success">
@@ -181,7 +200,8 @@ async function askQuestion() {
             },
 
             body: JSON.stringify({
-                question: question
+                question: question,
+                session_id: sessionId
             })
         });
 
@@ -193,7 +213,7 @@ async function askQuestion() {
 
         // Error Response
 
-        if (!data.success) {
+        if (!response.ok || !data.success) {
 
             addMessage(
                 "bot",

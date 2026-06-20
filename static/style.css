@@ -39,6 +39,20 @@ body {
     max-width: 75%;
 }
 
+.source-box {
+    margin-bottom: 15px;
+    padding: 10px 12px;
+    color: #495057;
+    background: #fff;
+    border-left: 3px solid #6c757d;
+    font-size: 0.875rem;
+}
+
+.source-box ul {
+    margin: 6px 0 0;
+    padding-left: 20px;
+}
+
 /* Scrollbar */
 
 #chatBox::-webkit-scrollbar {

@@ -19,9 +19,10 @@ from fastapi import (
     Request
 )
 
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
 # =========================================================
 # Pydantic
@@ -42,6 +43,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.auth.routes import router as auth_router
+from app.auth.security import get_current_user
+from app.dashboard.routes import router as dashboard_router
+from app.database.db import get_db
+from app.database.models import ChatHistory, Document, User
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_ollama import ChatOllama, OllamaEmbeddings
@@ -71,7 +76,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(auth_router, tags=["auth"])
+app.include_router(dashboard_router, tags=["dashboard"])
 
 
 # =========================================================
@@ -83,11 +89,6 @@ app.mount(
     StaticFiles(directory="static"),
     name="static"
 )
-
-templates = Jinja2Templates(
-    directory="templates"
-)
-
 
 # =========================================================
 # LLM Model
@@ -121,7 +122,6 @@ logger = logging.getLogger(__name__)
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    session_id: str = Field(default="default", min_length=1, max_length=100)
 
 
 def error_response(message, status_code):
@@ -135,9 +135,10 @@ def error_response(message, status_code):
 # =========================================================
 
 
-def get_vectorstore():
+def get_vectorstore(user_id):
 
     return Chroma(
+        collection_name=f"knowledgehub_user_{user_id}",
         persist_directory=CHROMA_DIR,
         embedding_function=embedding_model
     )
@@ -147,15 +148,9 @@ def get_vectorstore():
 # =========================================================
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request
-        }
-    )
+@app.get("/")
+async def home():
+    return RedirectResponse("/dashboard", status_code=303)
 
 
 # =========================================================
@@ -165,7 +160,9 @@ async def home(request: Request):
 
 @app.post("/upload")
 async def upload_pdf(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     file_path = None
     try:
@@ -224,9 +221,19 @@ async def upload_pdf(
         )
 
         # Vector Store
-        vectorstore = get_vectorstore()
+        vectorstore = get_vectorstore(current_user.id)
 
         vectorstore.add_documents(docs)
+
+        document = Document(
+            user_id=current_user.id,
+            filename=stored_filename,
+            original_filename=original_filename,
+            file_type="application/pdf",
+            file_size=bytes_written
+        )
+        db.add(document)
+        db.commit()
 
         return {
             "success": True,
@@ -237,6 +244,7 @@ async def upload_pdf(
 
     except Exception:
         logger.exception("PDF upload failed")
+        db.rollback()
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
         return error_response("Unable to process the PDF", 500)
@@ -248,19 +256,23 @@ async def upload_pdf(
 # Ask Question Route
 # =========================================================
 @app.post("/ask")
-def ask_question(request: ChatRequest):
+def ask_question(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     try:
         question = request.question.strip()
-        session_id = request.session_id.strip()
+        session_id = str(current_user.id)
 
-        if not question or not session_id:
-            return error_response("Question and session ID are required", 400)
+        if not question:
+            return error_response("Question is required", 400)
 
         with history_lock:
             session_history = list(chat_histories.get(session_id, []))
 
         # Vector Store
-        vectorstore = get_vectorstore()
+        vectorstore = get_vectorstore(current_user.id)
 
         # Better Retriever
         retriever = vectorstore.as_retriever(
@@ -274,11 +286,6 @@ def ask_question(request: ChatRequest):
         results = retriever.invoke(
             question
         )
-
-        # No Results
-        if not results:
-
-            return error_response("No relevant content found", 404)
 
         # Build Context
         MAX_CONTEXT_LENGTH = 4000
@@ -311,11 +318,12 @@ def ask_question(request: ChatRequest):
             Rules:
             1. Use the provided context as the primary source.
             2. If answer exists in context, answer ONLY from context.
-            3. If answer is not found in context,
-            clearly say:
-            "This answer is based on general knowledge."
-            4. Do not hallucinate facts.
-            5. Keep answers concise and accurate.
+            3. If the context is empty or does not contain the answer, answer
+            using your general knowledge and clearly begin with:
+            "Based on general knowledge:"
+            4. Never claim that general knowledge came from an uploaded document.
+            5. Do not hallucinate facts.
+            6. Keep answers concise and accurate.
 
             ========================
             Conversation History:
@@ -335,6 +343,13 @@ def ask_question(request: ChatRequest):
         response = llm.invoke(prompt)
 
         answer = response.content
+
+        db.add(ChatHistory(
+            user_id=current_user.id,
+            question=question,
+            answer=answer
+        ))
+        db.commit()
 
         # Save History
         with history_lock:
@@ -375,4 +390,5 @@ def ask_question(request: ChatRequest):
 
     except Exception:
         logger.exception("Question answering failed")
+        db.rollback()
         return error_response("Unable to answer the question", 500)

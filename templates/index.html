@@ -10,7 +10,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>RAG AI Chatbot</title>
+    <title>Dashboard | KnowledgeHub AI</title>
 
     <!-- Bootstrap -->
 
@@ -35,32 +35,63 @@
 
 </head>
 
-<body>
+<body class="dashboard-page">
 
-    <div class="container py-5">
+    <nav class="app-nav">
+        <div class="container app-nav-inner">
+            <a href="/dashboard" class="brand">KnowledgeHub AI</a>
+            <div class="account-menu">
+                <span>{{ user.name }}</span>
+                <form method="post" action="/logout">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">Sign out</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
 
         <div class="mx-auto app-container">
 
             <!-- Header -->
 
-            <div class="text-center mb-4">
+            <div class="dashboard-heading mb-4">
 
                 <h1 class="fw-bold app-title">
 
-                    <i class="fa-solid fa-robot"></i>
-
-                    RAG AI Chatbot
+                    Document workspace
 
                 </h1>
 
                 <p class="text-muted">
 
-                    Upload PDF documents and ask AI-powered questions.
+                    Ask about your private PDFs or use the model's general knowledge.
 
                 </p>
 
             </div>
 
+
+            <div class="summary-grid mb-4">
+                <div class="summary-item">
+                    <span>Recent documents</span>
+                    <strong>{{ documents|length }}</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Questions asked</span>
+                    <strong>{{ chat_count }}</strong>
+                </div>
+                <div class="summary-item summary-documents">
+                    <span>Latest files</span>
+                    <strong>
+                        {% if documents %}
+                            {{ documents[0].original_filename }}
+                        {% else %}
+                            No uploads yet
+                        {% endif %}
+                    </strong>
+                </div>
+            </div>
 
             <!-- Upload Card -->
 
@@ -133,7 +164,7 @@
 
                         <div class="bot-message">
 
-                            Hello! Upload a PDF and ask questions.
+                            Hello! Ask a general question or upload a PDF for document-based answers.
 
                         </div>
 

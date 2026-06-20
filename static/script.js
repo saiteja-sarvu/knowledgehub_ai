@@ -13,26 +13,6 @@ const chatBox = document.getElementById("chatBox");
 
 const askButton = document.getElementById("askButton");
 
-const sessionId = getSessionId();
-
-
-function getSessionId() {
-
-    const storageKey = "knowledgehub_session_id";
-
-    let value = localStorage.getItem(storageKey);
-
-    if (!value) {
-
-        value = crypto.randomUUID();
-
-        localStorage.setItem(storageKey, value);
-    }
-
-    return value;
-}
-
-
 // ======================================================
 // Escape HTML (Security)
 // ======================================================
@@ -128,6 +108,11 @@ async function uploadPDF() {
 
         const data = await response.json();
 
+        if (response.status === 401) {
+            window.location.assign("/login");
+            return;
+        }
+
         if (response.ok && data.success) {
 
             uploadStatus.innerHTML = `
@@ -200,12 +185,16 @@ async function askQuestion() {
             },
 
             body: JSON.stringify({
-                question: question,
-                session_id: sessionId
+                question: question
             })
         });
 
         const data = await response.json();
+
+        if (response.status === 401) {
+            window.location.assign("/login");
+            return;
+        }
 
         // Remove Loading
 
